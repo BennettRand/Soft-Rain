@@ -21,6 +21,8 @@ import json
 import urllib2
 import pywapi
 import cgi
+import time
+import pika
 
 from google.appengine.ext import ndb
 from google.appengine.api import users
@@ -58,6 +60,54 @@ def _check_complete(d):
 	if d.loc == None:
 		return False
 	return True
+
+class MessageHandler(webapp2.RequestHandler):
+	def __init__(self, *args):
+		self.channel = None
+		self.creds = pika.PlainCredentials('webapp', '123')
+		self.parameters = pika.ConnectionParameters(host = '127.0.0.1', port = 5672, credentials = self.creds)
+		self.connection = pika.BlockingConnection(self.parameters)
+		self.channel = self.connection.channel()
+		self.channel.confirm_delivery()
+		webapp2.RequestHandler.__init__(self, *args)
+	def on_connected(self, connection):
+		"""Called when we are fully connected to RabbitMQ"""
+		# Open a channel
+	def on_channel_open(self, new_channel):
+		"""Called when our channel has opened"""
+		self.channel = new_channel
+	def on_queue_declared(self, frame):
+		"""Called when RabbitMQ has told us our Queue has been declared, frame is the response from RabbitMQ"""
+		self.channel.confirm_delivery()
+		return
+	def __del__(self):
+		self.connection.close()
+
+class SettingsHandler(MessageHandler):
+	def get(self):
+		q = cgi.parse_qs(self.request.environ['QUERY_STRING'])
+		
+		if 'uuid' not in q:
+			self.response.write(False)
+			self.response.set_status(400)
+			return
+			
+		uuid = str(q['uuid'][0])
+		
+		try:
+			self.channel.queue_declare(queue=uuid, passive=True)
+		except pika.exceptions.ChannelClosed as e:
+			self.response.write(False)
+			self.response.set_status(404)
+			return
+		p = self.channel.basic_publish(exchange='',
+							 routing_key=uuid,
+							 body=json.dumps(q),
+							 # immediate = True,
+							 properties=pika.BasicProperties(content_type='text/plain',
+															 delivery_mode=1))
+		self.response.write(p)
+		return
 
 class HeartbeatHandler(webapp2.RequestHandler):
 	def get(self):
@@ -130,5 +180,6 @@ class MainHandler(webapp2.RequestHandler):
 
 app = webapp2.WSGIApplication([
 	('/', MainHandler),
-	('/poll', HeartbeatHandler)
+	('/poll', HeartbeatHandler),
+	('/settings', SettingsHandler)
 ], debug=True)
