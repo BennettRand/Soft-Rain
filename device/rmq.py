@@ -2,11 +2,32 @@ import pika
 import uuid
 import time
 import json
+import threading
+import platform
+import urllib2
 
 # Create a global channel variable to hold our channel object in
 channel = None
 run = True
 connection = None
+
+settings_dict = {'speed': 5}
+settings_change = False
+
+def upload(data):
+	global settings_dict
+	if data == 'true':
+		print settings_dict
+	return
+
+def settings(data):
+	global settings_dict
+	global settings_change
+	data = json.loads(data)
+	settings_dict.update(data)
+	settings_change = True
+	print settings_change
+	return
 
 def shutdown(data):
 	global run
@@ -25,7 +46,9 @@ def reconnect(data):
 	return
 
 actions = {'shutdown': shutdown,
-		   'reconnect': reconnect
+		   'reconnect': reconnect,
+		   'settings': settings,
+		   'upload': upload,
 }
 
 # Step #2
@@ -57,12 +80,24 @@ def handle_delivery(channel, method, header, body):
 	global actions
 	data = json.loads(body)
 	print data
+	channel.basic_ack(delivery_tag = method.delivery_tag)
 	for d in data:
 		if d in actions:
 			actions[d](data[d][0])
 
 # Step #1: Connect to RabbitMQ using the default parameters
-def main():
+
+def monitor_thread():
+	global settings_dict
+	global settings_change
+	while True:
+		print ".",
+		if settings_change:
+			print settings_dict
+			settings_change = False
+		time.sleep(10)
+
+def ioloop_thread():
 	global run
 	global connection
 	
@@ -73,7 +108,23 @@ def main():
 		connection = pika.SelectConnection(parameters, on_connected)
 		connection.ioloop.start()
 		print "Connection closed..."
-		time.sleep(5)
+		time.sleep(1)
+		
+def main():
+	global run
+	
+	monitor = threading.Thread(target = monitor_thread)
+	monitor.daemon = True
+	monitor.start()
+	
+	io = threading.Thread(target = ioloop_thread)
+	io.daemon = True
+	io.start()
+	
+	while run:
+		pass
+	print "Shutting down..."
+	time.sleep(5)
 
 if __name__ == "__main__":
 	try:
