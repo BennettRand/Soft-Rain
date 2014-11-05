@@ -12,51 +12,9 @@ import actions
 mq_handle = None
 
 settings_dict = {'speed': 5}
-settings_change = False
-
-def upload(data):
-	global settings_dict
-	if data == 'true':
-		print settings_dict
-	return
-
-def settings(data):
-	global settings_dict
-	global settings_change
-	data = json.loads(data)
-	settings_dict.update(data)
-	settings_change = True
-	print settings_change
-	return
-
-def shutdown(data):
-	global run
-	global connection
-	global mq_handle
-	if data == 'true':
-		print "Shutdown received"
-		run = False
-		mq_handle.run = False
-		mq_handle.connection.close()
-	return
-	
-def reconnect(data):
-	global connection
-	global mq_handle
-	if data == 'true':
-		print "Reconnect received"
-		mq_handle.connection.close()
-	return
-
-actionsd = {'shutdown': shutdown,
-		   'reconnect': reconnect,
-		   'settings': settings,
-		   'upload': upload,
-}
 
 def monitor_thread():
 	global settings_dict
-	global settings_change
 	while True:
 		print ".",
 		if actions.settings_change:
