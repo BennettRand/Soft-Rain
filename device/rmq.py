@@ -6,6 +6,7 @@ import threading
 import platform
 import urllib2
 import mq_handler
+import actions
 
 # Create a global channel variable to hold our channel object in
 mq_handle = None
@@ -47,7 +48,7 @@ def reconnect(data):
 		mq_handle.connection.close()
 	return
 
-actions = {'shutdown': shutdown,
+actionsd = {'shutdown': shutdown,
 		   'reconnect': reconnect,
 		   'settings': settings,
 		   'upload': upload,
@@ -58,21 +59,22 @@ def monitor_thread():
 	global settings_change
 	while True:
 		print ".",
-		if settings_change:
+		if actions.settings_change:
 			print settings_dict
-			settings_change = False
+			actions.settings_change = False
 		time.sleep(1)
 		
 def main():
 	global mq_handle
-	global actions
+	global actionsd
 	
 	monitor = threading.Thread(target = monitor_thread)
 	monitor.daemon = True
 	monitor.start()
 	
-	mq_handle = mq_handler.mq_handler(actions, 'device', '123')
+	mq_handle = mq_handler.mq_handler(actions.actions, 'device', '123')
 	mq_handle.start()
+	actions.init_actions(settings_dict, mq_handle)
 	
 	while mq_handle.run:
 		pass
